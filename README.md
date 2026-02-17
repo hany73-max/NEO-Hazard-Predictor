@@ -1,63 +1,40 @@
-# ☄️ NEO Hazard Predictor (NASA NeoWs)
+# NEO Hazard Predictor: Asteroid Classification Engine ☄️
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
-[![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-Machine_Learning-orange.svg)](https://scikit-learn.org/)
-[![Imbalanced-Learn](https://img.shields.io/badge/Imbalanced--Learn-SMOTE-green.svg)](https://imbalanced-learn.org/)
+## Overview
+A machine learning pipeline designed to classify Near-Earth Objects (NEOs) as hazardous or safe based on NASA orbital telemetry and physical characteristics data. 
 
-## 📝 Project Overview
-The **NEO Hazard Predictor** is a binary classification machine learning pipeline designed to predict whether a Near-Earth Object (NEO) poses a hazardous threat to Earth. 
+This project demonstrates a complete end-to-end classification architecture, focusing heavily on diagnosing and curing class imbalance and algorithmic overfitting in a production context.
 
-Utilizing telemetry and sensor data from the **NASA Near Earth Object Web Service (NeoWs)**, this project demonstrates a robust, production-ready data science pipeline with a strong emphasis on preventing data leakage, handling severe class imbalances, and mathematically driven feature selection.
+## The Engineering Challenge
+Planetary defense datasets are inherently imbalanced (~90% Safe, ~10% Hazardous). A naive model will achieve 90% accuracy by simply ignoring the minority class. In this domain, the cost of a **False Negative** (missing a hazardous asteroid) is catastrophic, while a **False Positive** (a false alarm) is merely an administrative cost. 
 
-## 📊 The Dataset
-The dataset contains over 90,000 recorded asteroids. Features include physical dimensions, relative velocity, and orbital proximity.
-* **Target Variable:** `hazardous` (Boolean: True/False)
-* **Challenge:** The dataset presents a severe **10:1 class imbalance** (~90% Safe, ~10% Hazardous), requiring advanced data augmentation techniques to prevent the model from defaulting to a majority-class prediction.
+**Objective:** Engineer a model that violently prioritizes **Recall** for the hazardous class without entirely sacrificing overall precision.
 
----
+## Pipeline Architecture
 
-## 🏗️ Pipeline Architecture & Engineering Decisions
+### 1. Data Engineering & Preprocessing
+* **Feature Engineering:** Consolidated redundant min/max diameter fields into a single `est_diameter_avg` to reduce dimensionality.
+* **Scaling:** Applied transformations to normalize massive numerical disparities between orbital distances and physical diameters.
+* **Imbalance Handling:** Utilized **SMOTE** (Synthetic Minority Over-sampling Technique) to inject synthetic hazardous samples into the training space, forcing the baseline algorithm to recognize minority class boundaries.
 
-### 1. Exploratory Data Analysis & Data Cleaning (Row-Wise Operations)
-* **Identifier Removal:** Dropped non-predictive features (`id`, `name`) to prevent model noise.
-* **Dimensionality Reduction (Row-wise):** Synthesized highly correlated features (`est_diameter_min` and `est_diameter_max`) into a single `est_diameter_avg` feature to retain 100% of the variance while reducing dimensionality.
-* **Zero-Variance Pruning:** Identified and removed the `sentry_object` feature after discovering it held zero variance across the dataset.
+### 2. Modeling & Hyperparameter Tuning
+* **Baseline:** Logistic Regression (established a baseline Recall vs. Precision tradeoff).
+* **Champion Engine:** `RandomForestClassifier`
+* **Diagnostic Tuning:** The un-tuned Random Forest suffered from terminal overfitting (1.00 Training Recall vs 0.61 Testing Recall). A `GridSearchCV` was deployed to apply physical constraints to the algorithm:
+  * `max_depth`: Applied branches-pruning to stop training data memorization and force generalized learning.
+  * `class_weight='balanced'`: Hacked the Gini Impurity calculation to severely penalize the engine for misclassifying the minority (Hazardous) class.
+  * `n_estimators`: Scaled the engine to ensure stable, averaged-out predictions.
 
-### 2. Data Splitting (Leakage Prevention)
-To ensure the integrity of the test environment, the dataset was split into an 80/20 Train-Test configuration **before** any column-wise operations were performed. 
-* Utilized `stratify=y` to guarantee the 10:1 hazard ratio was preserved in both the training and testing environments.
+### 3. Engine Interpretability (Black Box Extraction)
+Extracted the `feature_importances_` to visualize the AI's physical decision-making process. The model independently learned that **Absolute Magnitude** (light reflection) and **Estimated Diameter** are inversely correlated and act as the primary physical indicators of an asteroid's threat level.
 
-### 3. Feature Selection & Transformation (Column-Wise Operations)
-* **Multicollinearity Hunt:** Generated a Pearson Correlation Matrix strictly on the training data. Verified that all remaining features scored well below the 0.85 correlation threshold, confirming unique sensor inputs.
-* **Standardization:** Applied `StandardScaler` to normalize features with vastly different magnitudes (e.g., millions of kilometers vs. decimal magnitudes). *Strictly fitted on training data and applied to testing data to prevent data leakage.*
+## Tech Stack
+* **Language:** Python 3
+* **Machine Learning:** Scikit-Learn (Ensemble methods, Metrics, Model Selection)
+* **Data Processing:** Pandas, NumPy, Imbalanced-Learn (SMOTE)
+* **Visualization:** Matplotlib, Seaborn
 
-### 4. Synthetic Data Augmentation (Imbalance Handling)
-* Applied **SMOTE (Synthetic Minority Over-sampling Technique)** exclusively to the training data.
-* Successfully transformed the heavily skewed 65,596/7,072 target distribution into a perfectly balanced 65,596/65,596 training set, forcing the algorithms to weigh hazardous and safe asteroids equally.
-
-### 5. Modeling (In Progress)
-* **Baseline Model:** Logistic Regression
-* **Advanced Ensemble Model:** Random Forest Classifier
-
-### 6. Evaluation Metrics (Upcoming)
-Due to the critical nature of the minority class (Hazardous NEOs), standard accuracy is an invalid metric. The models will be evaluated primarily on:
-* **Recall (Sensitivity):** Minimizing False Negatives (Predicting an asteroid is safe when it is actually hazardous).
-* **Precision-Recall Curve Area:** Evaluating performance across different classification thresholds.
-
----
-
-## 💻 Repository Structure
-```text
-NEO-Hazard-Predictor/
-│
-├── data/
-│   ├── raw/neo.csv                 # Original NASA dataset
-│   └── processed/                  # Cleaned and split datasets
-│
-├── notebooks/
-│   ├── 01_EDA_and_Audit.ipynb      # Data exploration and visualizations
-│   ├── 02_PreModeling.ipynb        # Engineering, SMOTE, and Scaling
-│   └── 03_Modeling_and_Eval.ipynb  # Algorithm training and diagnostics
-│
-├── src/                            # Modular python scripts (Future)
-└── README.md
+## How to Run
+1. Clone the repository.
+2. Ensure you have the required libraries installed: `pip install -r requirements.txt`
+3. Run the Jupyter Notebook `modeling_and_evaluating.ipynb` to execute the pipeline from raw data ingestion to feature importance visualization.
